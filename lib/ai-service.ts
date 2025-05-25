@@ -21,33 +21,56 @@ export async function generateComebacks({
   language: string;
 }): Promise<string[]> {
   try {
-    // 构建系统提示词
-    const systemPrompt = `你是一个专业的回怼助手。根据用户选择的风格生成高质量的回应。
-风格说明：
-- 文艺风：优雅、有诗意、引用经典
-- 律师风：逻辑严密、有理有据、专业术语
-- 东北杠精风：幽默风趣、接地气、东北方言
-- 哲学家风：深度思考、引用哲学观点、思辨性强
-- 冷嘲热讽风：讽刺幽默、不留情面、机智犀利
-- 老板式发言：权威感、商业思维、指导性强
-- 敷衍风：应付式回应、不太在意、轻松随意
+    console.log('🤖 开始生成AI回怼，参数:', { originalText, style, intensity, language });
 
-激烈程度：${intensity}/10 (1最温和，10最激烈)
+    // 根据语气强度调整提示词
+    const intensityDescriptions = {
+      1: '温和礼貌，轻微反驳',
+      2: '稍微不满，委婉表达',
+      3: '明显不悦，直接反驳',
+      4: '相当愤怒，语气较重',
+      5: '非常愤怒，语气强硬',
+      6: '极度愤怒，措辞激烈',
+      7: '暴怒状态，言辞犀利',
+      8: '怒火中烧，毫不留情',
+      9: '愤怒至极，语言尖锐',
+      10: '暴怒爆发，火力全开'
+    };
+
+    const intensityLevel = intensityDescriptions[intensity as keyof typeof intensityDescriptions] || '适中强度';
+
+    const prompt = `你是一个专业的回怼生成器。请根据以下要求生成3个不同的回怼回应：
+
+原始内容："${originalText}"
+回怼风格：${style}
+语气强度：${intensity}/10 (${intensityLevel})
 语言：${language}
 
-请生成3个不同的回应，每个回应应该符合所选风格，并且具有合适的激烈程度。回应要简洁有力，每个回应不超过200字。`;
+重要要求：
+1. 语气强度必须严格按照${intensity}/10的等级来调整：
+   - 1-2级：温和委婉，礼貌反驳
+   - 3-4级：明显不满，直接反驳
+   - 5-6级：愤怒强硬，措辞激烈
+   - 7-8级：暴怒犀利，毫不留情
+   - 9-10级：火力全开，语言尖锐
 
-    const userPrompt = `对方说："${originalText}"
+2. 风格特点：
+   - 文艺风：用优雅的语言表达不满，即使愤怒也要有文采
+   - 律师风：用逻辑和法理反驳，愤怒时更加严厉和权威
+   - 东北杠精风：用东北话表达，愤怒时更加粗犷和直接
+   - 哲学家风：用哲学思辨反驳，愤怒时更加深刻和犀利
+   - 冷嘲热讽风：用讽刺挖苦，愤怒时更加尖酸刻薄
+   - 老板式发言：用权威口吻，愤怒时更加霸道和强势
+   - 敷衍风：表面敷衍，愤怒时透露出明显的不耐烦
 
-请按照${style}的风格，以${intensity}/10的激烈程度，生成3个不同的回怼回应。
+3. 每个回应都要体现当前的语气强度${intensity}/10
+4. 回应要针对原始内容进行有效反驳
+5. 每个回应控制在50字以内
+6. 直接返回3个回应，不要任何前缀或编号
 
-要求：
-- 直接给出回怼句子，不要任何格式标记
-- 每个回应独立成段
-- 简洁有力，符合${style}特色`;
+请生成3个符合要求的回应：`;
 
-    console.log('🚀 开始调用豆包AI API...');
-    console.log('参数：', { style, intensity, language, originalText: originalText.substring(0, 50) + '...' });
+    console.log('📝 发送给AI的提示词:', prompt);
 
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -56,20 +79,19 @@ export async function generateComebacks({
         'Authorization': `Bearer ${API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'deepseek-v3-250324', // 改回deepseek模型
-        stream: false,
+        model: 'deepseek-v3-250324',
         messages: [
           {
             role: 'system',
-            content: systemPrompt,
+            content: `你是一个专业的回怼生成器，擅长根据不同风格和语气强度生成精准的回应。你必须严格按照用户指定的语气强度等级来调整回应的愤怒程度和语言激烈程度。`,
           },
           {
             role: 'user',
-            content: userPrompt,
+            content: prompt,
           },
         ],
         temperature: 0.8,
-        max_tokens: 1000,
+        max_tokens: 500,
       }),
     });
 
@@ -376,138 +398,96 @@ function analyzeMemeStyle(text: string, style: string): {
   return { description, visual, expression, special };
 }
 
-// Generate memes using gpt-4o-image with dedicated API key - 为每个回应生成不同表情包
-export async function generateMemes({
-  originalText,
-  responseTexts, // 改为接收多个回应文本
+// Generate memes using gpt-4o-image with dedicated API key - 逐个生成表情包
+export async function generateSingleMeme({
+  responseText: inputText,
   style,
+  index,
 }: {
-  originalText: string;
-  responseTexts: string[]; // 修改为数组
+  responseText: string;
   style: string;
-}): Promise<string[]> {
+  index: number;
+}): Promise<string> {
   try {
-    console.log('🎨 开始为每个回应生成不同的表情包...');
-    console.log('回应文本数量:', responseTexts.length);
+    console.log(`🎨 开始生成第${index + 1}个表情包...`);
 
-    const memeUrls: string[] = [];
-
-    // 为每个回应文本生成对应的表情包
-    for (let i = 0; i < Math.min(responseTexts.length, 3); i++) {
-      const responseText = responseTexts[i];
-      console.log(`🎯 生成第${i + 1}个表情包，内容:`, responseText);
-
-      // 根据文字内容分析情感和关键词，生成更符合的表情包
-      const memeStyle = analyzeMemeStyle(responseText, style);
-      
-      const prompt = `Generate a classic WeChat meme in the style of "Panda Head" memes.
-
-Text to include: "${responseText}"
-
-Content analysis: ${memeStyle.description}
-Visual style: ${memeStyle.visual}
-Expression: ${memeStyle.expression}
-
-Style requirements:
-1. Simple cartoon character with round face and expressive features (like classic panda head memes)
-2. Clean design with black and white as main colors
-3. Bold, readable Chinese text positioned appropriately
-4. Character expression should match the content: ${memeStyle.expression}
-5. 1:1 square aspect ratio, suitable for WeChat stickers
-6. Minimalist background to highlight the character and text
-7. Similar to classic internet meme templates
-8. ${memeStyle.special}
-
-Create a meme that perfectly matches the tone and content of the text.`;
-
-      try {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${IMAGE_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-image',
-            stream: true,
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a helpful assistant that generates meme images.',
-              },
-              {
-                role: 'user',
-                content: prompt,
-              },
-            ],
-          }),
-        });
-
-        console.log(`📡 第${i + 1}个表情包响应状态:`, response.status);
-
-        if (response.ok) {
-          const text = await response.text();
-          console.log(`📡 第${i + 1}个表情包流式响应:`, text.substring(0, 200));
-          
-          let fullResponse = '';
-          
-          // 处理SSE格式的数据
-          const lines = text.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data !== '[DONE]' && data.trim() !== '') {
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content;
-                  if (content) {
-                    fullResponse += content;
-                  }
-                } catch (parseError) {
-                  // 忽略解析错误，继续处理
-                }
-              }
-            }
-          }
-          
-          // 检查是否包含图片URL
-          const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+\.(jpg|jpeg|png|gif|webp)/gi;
-          const match = fullResponse.match(urlRegex);
-          if (match) {
-            const imageUrl = match[0];
-            console.log(`🖼️ 第${i + 1}个表情包生成成功:`, imageUrl);
-            memeUrls.push(imageUrl);
-          } else {
-            console.log(`⚠️ 第${i + 1}个表情包未找到图片URL，使用备用`);
-            memeUrls.push(generateSingleFallbackMeme(i));
-          }
-        } else {
-          console.log(`❌ 第${i + 1}个表情包生成失败，使用备用`);
-          memeUrls.push(generateSingleFallbackMeme(i));
-        }
-      } catch (error) {
-        console.error(`❌ 第${i + 1}个表情包生成出错:`, error);
-        memeUrls.push(generateSingleFallbackMeme(i));
-      }
-
-      // 添加延迟避免API限制
-      if (i < responseTexts.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-
-    // 确保返回3个表情包
-    while (memeUrls.length < 3) {
-      memeUrls.push(generateSingleFallbackMeme(memeUrls.length));
-    }
-
-    console.log('✅ 所有表情包生成完成:', memeUrls);
-    return memeUrls.slice(0, 3);
+    // 分析表情包风格
+    const memeStyle = analyzeMemeStyle(inputText, style);
     
+    // 生成提示词
+    const prompt = `Create a classic Chinese WeChat meme with panda head character. 
+Style: ${memeStyle.description}
+Visual: ${memeStyle.visual}
+Expression: ${memeStyle.expression}
+Special: ${memeStyle.special}
+
+Requirements:
+- Classic panda head meme style popular in Chinese social media
+- Square format (1:1 ratio) perfect for WeChat
+- Clear, bold expression that matches the sarcastic tone
+- High contrast and vibrant colors
+- Professional meme quality
+- Text area at bottom for Chinese text overlay
+- ${style} attitude and expression`;
+
+    console.log(`🎯 第${index + 1}个表情包提示词:`, prompt);
+
+    const response = await fetch('https://vip.apiyi.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer sk-v8Vs0HHjVDZVSmEA1859F600006b41469f9084669c3f8234`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-image',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard',
+        response_format: 'url'
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`❌ 第${index + 1}个表情包生成失败:`, response.status, response.statusText);
+      return generateSingleFallbackMeme(index);
+    }
+
+    const apiResponseText = await response.text();
+    console.log(`📝 第${index + 1}个表情包API响应:`, apiResponseText);
+
+    // 处理流式响应
+    const lines = apiResponseText.split('\n').filter(line => line.trim());
+    let imageUrl = '';
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const jsonStr = line.substring(6);
+          if (jsonStr === '[DONE]') break;
+          
+          const data = JSON.parse(jsonStr);
+          if (data.data && data.data[0] && data.data[0].url) {
+            imageUrl = data.data[0].url;
+            break;
+          }
+        } catch (e) {
+          console.log(`⚠️ 第${index + 1}个表情包解析行失败:`, line);
+        }
+      }
+    }
+
+    if (imageUrl) {
+      console.log(`✅ 第${index + 1}个表情包生成成功:`, imageUrl);
+      return imageUrl;
+    } else {
+      console.error(`❌ 第${index + 1}个表情包未找到图片URL`);
+      return generateSingleFallbackMeme(index);
+    }
+
   } catch (error) {
-    console.error('❌ 表情包生成出错:', error);
-    console.log('🔄 使用备用表情包...');
-    return generateFallbackMemes();
+    console.error(`❌ 第${index + 1}个表情包生成出错:`, error);
+    return generateSingleFallbackMeme(index);
   }
 }
 
@@ -516,15 +496,6 @@ function generateSingleFallbackMeme(index: number): string {
   const seeds = ['angry', 'smug', 'sarcastic'];
   const colors = ['3b82f6', 'ef4444', '10b981'];
   return `https://api.dicebear.com/7.x/shapes/svg?seed=${seeds[index] || 'default'}&backgroundColor=${colors[index] || '6b7280'}&size=300`;
-}
-
-// 备用表情包生成器
-function generateFallbackMemes(): string[] {
-  return [
-    generateSingleFallbackMeme(0),
-    generateSingleFallbackMeme(1),
-    generateSingleFallbackMeme(2)
-  ];
 }
 
 // Create a complete record
@@ -555,11 +526,11 @@ export async function createComebackResponse({
   if (enableImageGeneration) {
     console.log('🎨 开始生成表情包...');
     // Generate memes based on all responses
-    memeUrls = await generateMemes({
-      originalText,
-      responseTexts: responses,
+    memeUrls = await Promise.all(responses.map((responseText, index) => generateSingleMeme({
+      responseText,
       style,
-    });
+      index,
+    })));
   } else {
     console.log('⚡ 跳过表情包生成，使用占位符');
     // 使用占位符表情包，不消耗API

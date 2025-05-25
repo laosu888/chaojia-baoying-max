@@ -14,6 +14,15 @@ export function HeroSection() {
     }
   };
   
+  const scrollToTestimonials = () => {
+    const testimonialsSection = document.getElementById('testimonials-section');
+    if (testimonialsSection) {
+      const yOffset = -80; // Header height offset
+      const y = testimonialsSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  };
+  
   // Falling emojis animation
   const emojis = ['😂', '🔥', '💯', '👊', '💪', '🤬', '💣', '🤡', '😡', '👑'];
   
@@ -39,6 +48,31 @@ export function HeroSection() {
               duration: Math.random() * 10 + 10,
               repeat: Infinity,
               delay: Math.random() * 5,
+              ease: 'linear'
+            }}
+          >
+            {emoji}
+          </motion.div>
+        ))}
+        {/* 右侧额外的表情包掉落 */}
+        {emojis.map((emoji, i) => (
+          <motion.div
+            key={`right-${i}`}
+            className="absolute text-2xl md:text-3xl"
+            initial={{ 
+              x: `${50 + Math.random() * 50}%`, // 右侧50%-100%
+              y: -50,
+              opacity: Math.random() * 0.4 + 0.3,
+              scale: Math.random() * 0.4 + 0.6
+            }}
+            animate={{
+              y: '120vh',
+              rotate: -Math.random() * 360, // 反向旋转
+            }}
+            transition={{
+              duration: Math.random() * 8 + 12,
+              repeat: Infinity,
+              delay: Math.random() * 8 + 2, // 不同的延迟
               ease: 'linear'
             }}
           >
@@ -93,9 +127,9 @@ export function HeroSection() {
             variant="outline" 
             size="lg"
             className="bg-muted/50 border border-muted-foreground/30 hover:bg-muted hover:text-accent_orange px-6 py-5"
-            onClick={scrollToMain}
+            onClick={scrollToTestimonials}
           >
-            <span className="mr-2">查看示例</span>
+            <span className="mr-2">查看用户心声</span>
             <MessageSquare className="h-4 w-4" />
           </Button>
         </motion.div>

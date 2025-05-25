@@ -8,14 +8,16 @@ import { Footer } from '@/components/sections/footer';
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col">
-      <HeroSection />
-      <ComebackGenerator />
-      <RankingSection />
-      <MemeEditorSection />
-      <Testimonials />
-      <KnowledgeBase />
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <HeroSection />
+        <ComebackGenerator />
+        <RankingSection />
+        <MemeEditorSection />
+        <Testimonials />
+        <KnowledgeBase />
+      </div>
       <Footer />
-    </main>
+    </div>
   );
 }
