@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, RotateCcw, Download, Copy, Share2, Flame, ImageIcon } from 'lucide-react';
 import TextareaAutosize from 'react-textarea-autosize';
@@ -56,6 +56,17 @@ export function ComebackGenerator() {
   
   // Refs
   const responseRefs = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
+  
+  // 监听图片加载状态，当所有图片都加载完成时重置生成状态
+  useEffect(() => {
+    if (enableImageGeneration && isGenerating && memeLoadingStates.every(state => !state)) {
+      console.log('🎉 所有图片生成完成，重置状态');
+      setIsLoadingMemes(false);
+      setShowDinoGame(false);
+      setIsGenerating(false);
+      toast.success('所有表情包生成完成！');
+    }
+  }, [memeLoadingStates, enableImageGeneration, isGenerating]);
   
   // Handle text generation callback - 文字生成完成立即显示
   const handleTextGenerated = (responses: string[]) => {
@@ -157,20 +168,7 @@ export function ComebackGenerator() {
       // Add to history
       addToHistory(response);
       
-      // 如果开启了图片生成，等待所有图片生成完成
-      if (enableImageGeneration) {
-        // 等待所有图片生成完成
-        const checkAllImagesLoaded = () => {
-          if (memeLoadingStates.every(state => !state)) {
-            setIsLoadingMemes(false);
-            setShowDinoGame(false);
-            setIsGenerating(false);
-          } else {
-            setTimeout(checkAllImagesLoaded, 500);
-          }
-        };
-        checkAllImagesLoaded();
-      }
+      // 图片生成状态由useEffect监听处理，无需手动检查
       
     } catch (error) {
       console.error('Error generating comeback:', error);
