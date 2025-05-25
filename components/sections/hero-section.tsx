@@ -1,25 +1,18 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, Flame, Zap, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export function HeroSection() {
-  const mainSectionRef = useRef<HTMLDivElement>(null);
-  
   const scrollToMain = () => {
-    if (mainSectionRef.current) {
+    const generatorSection = document.getElementById('generator-section');
+    if (generatorSection) {
       const yOffset = -80; // Header height offset
-      const y = mainSectionRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      const y = generatorSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
       window.scrollTo({ top: y, behavior: 'smooth' });
     }
   };
-  
-  // Set ref to the next section
-  useEffect(() => {
-    mainSectionRef.current = document.getElementById('generator-section') as HTMLDivElement;
-  }, []);
   
   // Falling emojis animation
   const emojis = ['😂', '🔥', '💯', '👊', '💪', '🤬', '💣', '🤡', '😡', '👑'];
