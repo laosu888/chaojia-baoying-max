@@ -20,19 +20,20 @@ export function HeroSection() {
   };
   
   // Falling emojis animation - 增加更多表情包
-  const emojis = ['😂', '🔥', '💯', '👊', '💪', '🤬', '💣', '🤡', '😡', '👑', '🎯', '⚡', '💥', '🚀'];
+  const leftEmojis = ['😂', '🔥', '💯', '👊', '💪', '🤬', '💣'];
+  const rightEmojis = ['🤡', '😡', '👑', '🎯', '⚡', '💥', '🚀', '😤', '🙄', '🤨'];
   
   return (
     <section className="relative min-h-[80vh] flex flex-col items-center justify-center hero-gradient overflow-hidden">
       {/* Falling emojis - 左侧 */}
-      <div className="absolute inset-0 pointer-events-none">
-        {emojis.slice(0, 7).map((emoji, i) => (
+      <div className="absolute inset-0 pointer-events-none z-0">
+        {leftEmojis.map((emoji, i) => (
           <motion.div
             key={`left-${i}`}
             className="absolute text-3xl md:text-4xl"
             initial={{ 
-              x: `${Math.random() * 45}%`, // 左侧0-45%
-              y: -50,
+              x: `${Math.random() * 40}%`, // 左侧0-40%
+              y: -100,
               opacity: Math.random() * 0.6 + 0.4,
               scale: Math.random() * 0.5 + 0.8
             }}
@@ -51,25 +52,25 @@ export function HeroSection() {
           </motion.div>
         ))}
         
-        {/* 右侧表情包掉落 */}
-        {emojis.slice(7).map((emoji, i) => (
+        {/* 右侧表情包掉落 - 确保显示 */}
+        {rightEmojis.map((emoji, i) => (
           <motion.div
             key={`right-${i}`}
-            className="absolute text-2xl md:text-3xl"
+            className="absolute text-2xl md:text-3xl z-0"
             initial={{ 
-              x: `${55 + Math.random() * 45}%`, // 右侧55%-100%
-              y: -50,
-              opacity: Math.random() * 0.5 + 0.3,
-              scale: Math.random() * 0.4 + 0.6
+              x: `${60 + Math.random() * 40}%`, // 右侧60%-100%
+              y: -100,
+              opacity: Math.random() * 0.7 + 0.3,
+              scale: Math.random() * 0.6 + 0.7
             }}
             animate={{
               y: '120vh',
               rotate: -Math.random() * 360, // 反向旋转
             }}
             transition={{
-              duration: Math.random() * 10 + 10,
+              duration: Math.random() * 10 + 8,
               repeat: Infinity,
-              delay: Math.random() * 6 + 1, // 不同的延迟
+              delay: Math.random() * 8 + 1, // 不同的延迟
               ease: 'linear'
             }}
           >

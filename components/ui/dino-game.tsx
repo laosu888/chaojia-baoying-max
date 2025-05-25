@@ -77,28 +77,35 @@ export function DinoGame({ isVisible, onGameEnd }: DinoGameProps) {
 
   // 跳跃逻辑
   const jump = useCallback(() => {
+    console.log('🦕 跳跃触发，当前状态:', { gameStarted, gameOver, isJumping });
+    
     if (!gameStarted && !gameOver) {
-      startGame();
+      console.log('🎮 开始游戏');
+      setGameStarted(true);
       return;
     }
     
-    if (!isJumping && !gameOver) {
+    if (!isJumping && !gameOver && gameStarted) {
+      console.log('🦘 执行跳跃');
       setIsJumping(true);
-      setDinoY(-JUMP_HEIGHT); // 使用动态跳跃高度
+      setDinoY(-JUMP_HEIGHT);
       
       setTimeout(() => {
         setDinoY(0);
         setIsJumping(false);
+        console.log('🦕 跳跃结束');
       }, 600);
     }
-  }, [isJumping, gameOver, gameStarted, startGame]);
+  }, [isJumping, gameOver, gameStarted]);
 
   // 键盘和触摸事件
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      console.log('⌨️ 键盘按下:', e.code);
       if (e.code === 'Space' || e.code === 'ArrowUp') {
         e.preventDefault();
         if (gameOver) {
+          console.log('🔄 重置游戏');
           resetGame();
         } else {
           jump();
@@ -108,6 +115,7 @@ export function DinoGame({ isVisible, onGameEnd }: DinoGameProps) {
 
     // 触摸事件处理
     const handleTouchStart = (e: TouchEvent) => {
+      console.log('👆 触摸开始');
       e.preventDefault();
       if (gameOver) {
         resetGame();
@@ -118,6 +126,7 @@ export function DinoGame({ isVisible, onGameEnd }: DinoGameProps) {
 
     // 点击事件处理
     const handleClick = (e: MouseEvent) => {
+      console.log('🖱️ 鼠标点击');
       e.preventDefault();
       if (gameOver) {
         resetGame();
@@ -127,6 +136,7 @@ export function DinoGame({ isVisible, onGameEnd }: DinoGameProps) {
     };
 
     if (isVisible) {
+      console.log('🎮 添加事件监听器');
       // 全局键盘事件
       document.addEventListener('keydown', handleKeyPress);
       
@@ -135,13 +145,16 @@ export function DinoGame({ isVisible, onGameEnd }: DinoGameProps) {
       if (gameElement) {
         gameElement.addEventListener('touchstart', handleTouchStart, { passive: false });
         gameElement.addEventListener('click', handleClick);
+        gameElement.addEventListener('mousedown', handleClick); // 添加mousedown事件
       }
       
       return () => {
+        console.log('🧹 清理事件监听器');
         document.removeEventListener('keydown', handleKeyPress);
         if (gameElement) {
           gameElement.removeEventListener('touchstart', handleTouchStart);
           gameElement.removeEventListener('click', handleClick);
+          gameElement.removeEventListener('mousedown', handleClick);
         }
       };
     }

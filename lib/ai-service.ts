@@ -432,10 +432,11 @@ Requirements:
 
     console.log(`🎯 第${index + 1}个表情包提示词:`, prompt);
 
+    // 使用图片生成API
     const response = await fetch('https://vip.apiyi.com/v1/images/generations', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer sk-v8Vs0HHjVDZVSmEA1859F600006b41469f9084669c3f8234`,
+        'Authorization': `Bearer ${IMAGE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -448,40 +449,28 @@ Requirements:
       }),
     });
 
+    console.log(`📡 第${index + 1}个表情包API响应状态:`, response.status);
+
     if (!response.ok) {
-      console.error(`❌ 第${index + 1}个表情包生成失败:`, response.status, response.statusText);
+      const errorText = await response.text();
+      console.error(`❌ 第${index + 1}个表情包生成失败:`, response.status, errorText);
       return generateSingleFallbackMeme(index);
     }
 
-    const apiResponseText = await response.text();
-    console.log(`📝 第${index + 1}个表情包API响应:`, apiResponseText);
+    const data = await response.json();
+    console.log(`📝 第${index + 1}个表情包API响应数据:`, data);
 
-    // 处理流式响应
-    const lines = apiResponseText.split('\n').filter(line => line.trim());
-    let imageUrl = '';
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const jsonStr = line.substring(6);
-          if (jsonStr === '[DONE]') break;
-          
-          const data = JSON.parse(jsonStr);
-          if (data.data && data.data[0] && data.data[0].url) {
-            imageUrl = data.data[0].url;
-            break;
-          }
-        } catch (e) {
-          console.log(`⚠️ 第${index + 1}个表情包解析行失败:`, line);
-        }
-      }
-    }
-
-    if (imageUrl) {
+    // 检查响应格式
+    if (data.data && data.data[0] && data.data[0].url) {
+      const imageUrl = data.data[0].url;
       console.log(`✅ 第${index + 1}个表情包生成成功:`, imageUrl);
       return imageUrl;
+    } else if (data.url) {
+      // 备用格式检查
+      console.log(`✅ 第${index + 1}个表情包生成成功(备用格式):`, data.url);
+      return data.url;
     } else {
-      console.error(`❌ 第${index + 1}个表情包未找到图片URL`);
+      console.error(`❌ 第${index + 1}个表情包响应格式异常:`, data);
       return generateSingleFallbackMeme(index);
     }
 
@@ -492,7 +481,7 @@ Requirements:
 }
 
 // 生成单个备用表情包
-function generateSingleFallbackMeme(index: number): string {
+export function generateSingleFallbackMeme(index: number): string {
   const seeds = ['angry', 'smug', 'sarcastic'];
   const colors = ['3b82f6', 'ef4444', '10b981'];
   return `https://api.dicebear.com/7.x/shapes/svg?seed=${seeds[index] || 'default'}&backgroundColor=${colors[index] || '6b7280'}&size=300`;

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useStore } from '@/lib/store';
-import { createComebackResponse } from '@/lib/ai-service';
+import { createComebackResponse, generateComebacks, generateSingleMeme, generateSingleFallbackMeme } from '@/lib/ai-service';
 import { addToHistory } from '@/lib/local-storage';
 import { RageMeter } from '@/components/ui/rage-meter';
 import { DinoGame } from '@/components/ui/dino-game';
@@ -67,56 +67,112 @@ export function ComebackGenerator() {
       setIsGenerating(true);
       setShowIntro(false);
       setResult(null);
-      setIsLoadingMemes(enableImageGeneration);
-      setShowDinoGame(enableImageGeneration);
-      setGameScore(0);
       setProgressiveMemes([]);
+      setGameScore(0);
       
       // Update rage meter based on intensity
       setRageLevel(intensity);
       
-      // Generate response
-      const response = await createComebackResponse({
+      console.log('🚀 开始生成文字回应...');
+      
+      // 先生成文字回应
+      const textResponses = await generateComebacks({
         originalText,
         style,
         intensity,
         language,
-        enableImageGeneration,
-        onMemeGenerated: (memeUrl: string, index: number) => {
-          setProgressiveMemes(prev => {
-            const newMemes = [...prev];
-            newMemes[index] = memeUrl;
-            return newMemes;
-          });
-        }
       });
       
-      // Add to history
-      addToHistory(response);
+      console.log('✅ 文字回应生成完成，立即显示');
       
-      // Update result state
+      // 立即显示文字回应
       setResult({
-        responses: response.responses,
-        memeUrls: response.memeUrls,
+        responses: textResponses,
+        memeUrls: []
       });
       
-      // 如果开启了图片生成，初始化表情包占位符
+      setIsGenerating(false); // 文字生成完成，停止loading
+      
+      // 如果开启图片生成，开始流式生成表情包
       if (enableImageGeneration) {
-        setProgressiveMemes([
+        console.log('🎨 开始流式生成表情包...');
+        setIsLoadingMemes(true);
+        setShowDinoGame(true);
+        
+        // 初始化占位符
+        const placeholders = [
           'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...',
           'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...',
           'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...'
-        ]);
+        ];
+        setProgressiveMemes(placeholders);
+        
+        // 逐个生成表情包
+        for (let i = 0; i < textResponses.length && i < 3; i++) {
+          try {
+            console.log(`🎯 开始生成第${i + 1}个表情包`);
+            
+            const memeUrl = await generateSingleMeme({
+              responseText: textResponses[i],
+              style,
+              index: i,
+            });
+            
+            console.log(`✅ 第${i + 1}个表情包生成完成，立即更新显示`);
+            
+            // 立即更新对应位置的表情包
+            setProgressiveMemes(prev => {
+              const newMemes = [...prev];
+              newMemes[i] = memeUrl;
+              return newMemes;
+            });
+            
+            // 更新result中的memeUrls
+            setResult(prevResult => {
+              if (!prevResult) return prevResult;
+              const newMemeUrls = [...prevResult.memeUrls];
+              newMemeUrls[i] = memeUrl;
+              return {
+                ...prevResult,
+                memeUrls: newMemeUrls
+              };
+            });
+            
+          } catch (error) {
+            console.error(`❌ 第${i + 1}个表情包生成失败:`, error);
+            const fallbackUrl = `https://via.placeholder.com/300x300/ef4444/ffffff?text=生成失败${i + 1}`;
+            
+            setProgressiveMemes(prev => {
+              const newMemes = [...prev];
+              newMemes[i] = fallbackUrl;
+              return newMemes;
+            });
+          }
+        }
+        
+        setIsLoadingMemes(false);
+        setShowDinoGame(false);
       }
+      
+      // Add to history
+      const finalRecord = {
+        id: Date.now().toString(),
+        originalText,
+        responses: textResponses,
+        memeUrls: enableImageGeneration ? progressiveMemes : [],
+        style,
+        intensity,
+        language,
+        timestamp: Date.now(),
+      };
+      addToHistory(finalRecord);
       
     } catch (error) {
       console.error('Error generating comeback:', error);
       toast.error('生成失败，请重试');
       setShowDinoGame(false);
-    } finally {
       setIsGenerating(false);
       setIsLoadingMemes(false);
-      setShowDinoGame(false);
     }
   };
   
@@ -614,45 +670,72 @@ export function ComebackGenerator() {
                   )}
                   
                   {/* 表情包显示 - 支持逐个显示 */}
-                  {(result || progressiveMemes.length > 0) && !isLoadingMemes && (
+                  {(result || progressiveMemes.length > 0) && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       className="space-y-4"
                     >
                       {enableImageGeneration ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {/* 使用progressiveMemes或result.memeUrls */}
-                          {(progressiveMemes.length > 0 ? progressiveMemes : result?.memeUrls || []).map((url, index) => (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {/* 使用progressiveMemes实现流式显示 */}
+                          {progressiveMemes.map((url, index) => (
                             <motion.div
-                              key={index}
-                              initial={{ opacity: 0, scale: 0.9 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ delay: index * 0.2 }}
-                              className="relative bg-muted rounded-lg overflow-hidden border border-border"
+                              key={`meme-${index}`}
+                              initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              transition={{ 
+                                delay: index * 0.3, // 错开动画时间
+                                duration: 0.5,
+                                type: "spring",
+                                stiffness: 100
+                              }}
+                              className="relative bg-muted rounded-lg overflow-hidden border border-border group hover:shadow-lg transition-shadow"
                             >
-                              <img
-                                src={url}
-                                alt={`表情包 ${index + 1}`}
-                                className="w-full aspect-square object-cover"
-                                onError={(e) => {
-                                  // 图片加载失败时的处理
-                                  const target = e.target as HTMLImageElement;
-                                  target.src = `https://via.placeholder.com/300x300/ef4444/ffffff?text=生成失败`;
-                                }}
-                              />
+                              <div className="aspect-square relative">
+                                <img
+                                  src={url}
+                                  alt={`表情包 ${index + 1}`}
+                                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.src = generateSingleFallbackMeme(index);
+                                  }}
+                                />
+                                
+                                {/* 生成中的遮罩 */}
+                                {url.includes('生成中') && (
+                                  <motion.div 
+                                    className="absolute inset-0 bg-black/60 flex items-center justify-center"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                  >
+                                    <div className="text-white text-center">
+                                      <motion.div 
+                                        className="w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-2"
+                                        animate={{ rotate: 360 }}
+                                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                      />
+                                      <p className="text-sm">生成中...</p>
+                                      <p className="text-xs opacity-75">第{index + 1}张</p>
+                                    </div>
+                                  </motion.div>
+                                )}
+                                
+                                {/* 生成完成的标识 */}
+                                {!url.includes('生成中') && !url.includes('placeholder') && (
+                                  <motion.div
+                                    className="absolute top-2 right-2 bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ delay: 0.2 }}
+                                  >
+                                    ✓
+                                  </motion.div>
+                                )}
+                              </div>
                               
-                              {/* 显示生成状态 */}
-                              {url.includes('生成中') && (
-                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                  <div className="text-white text-center">
-                                    <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full mx-auto mb-2" />
-                                    <p className="text-sm">生成中...</p>
-                                  </div>
-                                </div>
-                              )}
-                              
-                              <div className="absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm p-2 flex justify-between">
+                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Button 
                                   onClick={() => downloadMeme(url)}
                                   className="h-8 px-3 text-xs text-white/90 hover:text-white bg-transparent hover:bg-white/10"
@@ -672,6 +755,19 @@ export function ComebackGenerator() {
                               </div>
                             </motion.div>
                           ))}
+                          
+                          {/* 显示生成进度 */}
+                          {isLoadingMemes && (
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="col-span-full text-center py-4"
+                            >
+                              <div className="text-sm text-muted-foreground">
+                                🎨 正在逐个生成表情包... ({progressiveMemes.filter(url => !url.includes('生成中')).length}/3)
+                              </div>
+                            </motion.div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-center py-16 space-y-4">
