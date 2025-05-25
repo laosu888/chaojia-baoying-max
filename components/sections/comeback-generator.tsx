@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useStore } from '@/lib/store';
-import { createComebackResponse, generateComebacks, generateSingleMeme, generateSingleFallbackMeme } from '@/lib/ai-service';
+import { createComebackResponse } from '@/lib/ai-service';
 import { addToHistory } from '@/lib/local-storage';
 import { RageMeter } from '@/components/ui/rage-meter';
 import { DinoGame } from '@/components/ui/dino-game';
@@ -44,16 +44,79 @@ export function ComebackGenerator() {
     memeUrls: string[];
   } | null>(null);
   
+  // Real-time image generation state
+  const [realtimeMemeUrls, setRealtimeMemeUrls] = useState<string[]>([]);
+  const [memeLoadingStates, setMemeLoadingStates] = useState<boolean[]>([true, true, true]);
+  
   // Animation states
   const [showIntro, setShowIntro] = useState(true);
   const [isLoadingMemes, setIsLoadingMemes] = useState(false);
   const [showDinoGame, setShowDinoGame] = useState(false);
   const [gameScore, setGameScore] = useState(0);
-  const [progressiveMemes, setProgressiveMemes] = useState<string[]>([]);
   
   // Refs
   const responseRefs = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
   
+  // Handle text generation callback - 文字生成完成立即显示
+  const handleTextGenerated = (responses: string[]) => {
+    console.log('📝 收到文字回应，立即显示:', responses);
+    
+    // 立即更新结果状态，显示文字回应
+    setResult({
+      responses,
+      memeUrls: enableImageGeneration ? [
+        'https://via.placeholder.com/300x300/6b7280/ffffff?text=正在生成中...',
+        'https://via.placeholder.com/300x300/ef4444/ffffff?text=正在生成中...',
+        'https://via.placeholder.com/300x300/10b981/ffffff?text=正在生成中...'
+      ] : [
+        'https://via.placeholder.com/300x300/6b7280/ffffff?text=表情包生成已关闭',
+        'https://via.placeholder.com/300x300/ef4444/ffffff?text=开启后可生成',
+        'https://via.placeholder.com/300x300/10b981/ffffff?text=AI表情包'
+      ],
+    });
+    
+    // 如果没有开启图片生成，立即结束加载状态
+    if (!enableImageGeneration) {
+      setIsGenerating(false);
+      setIsLoadingMemes(false);
+      setShowDinoGame(false);
+    }
+    
+    toast.success('文字回应已生成！');
+  };
+
+  // Handle real-time image generation callback
+  const handleImageGenerated = (index: number, imageUrl: string) => {
+    console.log(`🖼️ 收到第${index + 1}张图片:`, imageUrl);
+    
+    // 更新实时图片数组
+    setRealtimeMemeUrls(prev => {
+      const newUrls = [...prev];
+      newUrls[index] = imageUrl;
+      return newUrls;
+    });
+    
+    // 更新加载状态
+    setMemeLoadingStates(prev => {
+      const newStates = [...prev];
+      newStates[index] = false;
+      return newStates;
+    });
+    
+    // 更新结果中的图片
+    setResult(prev => {
+      if (!prev) return null;
+      const newMemeUrls = [...prev.memeUrls];
+      newMemeUrls[index] = imageUrl;
+      return {
+        ...prev,
+        memeUrls: newMemeUrls
+      };
+    });
+    
+    toast.success(`第${index + 1}张表情包生成完成！`);
+  };
+
   // Handle form submission
   const handleSubmit = async () => {
     if (!originalText.trim()) {
@@ -67,112 +130,54 @@ export function ComebackGenerator() {
       setIsGenerating(true);
       setShowIntro(false);
       setResult(null);
-      setProgressiveMemes([]);
-      setGameScore(0);
+      
+      // 重置实时图片状态
+      setRealtimeMemeUrls([]);
+      setMemeLoadingStates([true, true, true]);
+      
+      if (enableImageGeneration) {
+        setIsLoadingMemes(true);
+        setShowDinoGame(true);
+      }
       
       // Update rage meter based on intensity
       setRageLevel(intensity);
       
-      console.log('🚀 开始生成文字回应...');
-      
-      // 先生成文字回应
-      const textResponses = await generateComebacks({
+      // Generate response with real-time callbacks
+      const response = await createComebackResponse({
         originalText,
         style,
         intensity,
         language,
+        enableImageGeneration,
+        onImageGenerated: enableImageGeneration ? handleImageGenerated : undefined,
+        onTextGenerated: handleTextGenerated, // 文字生成完成立即回调
       });
-      
-      console.log('✅ 文字回应生成完成，立即显示');
-      
-      // 立即显示文字回应
-      setResult({
-        responses: textResponses,
-        memeUrls: []
-      });
-      
-      setIsGenerating(false); // 文字生成完成，停止loading
-      
-      // 如果开启图片生成，开始流式生成表情包
-      if (enableImageGeneration) {
-        console.log('🎨 开始流式生成表情包...');
-        setIsLoadingMemes(true);
-        setShowDinoGame(true);
-        
-        // 初始化占位符
-        const placeholders = [
-          'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...',
-          'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...',
-          'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...'
-        ];
-        setProgressiveMemes(placeholders);
-        
-        // 逐个生成表情包
-        for (let i = 0; i < textResponses.length && i < 3; i++) {
-          try {
-            console.log(`🎯 开始生成第${i + 1}个表情包`);
-            
-            const memeUrl = await generateSingleMeme({
-              responseText: textResponses[i],
-              style,
-              index: i,
-            });
-            
-            console.log(`✅ 第${i + 1}个表情包生成完成，立即更新显示`);
-            
-            // 立即更新对应位置的表情包
-            setProgressiveMemes(prev => {
-              const newMemes = [...prev];
-              newMemes[i] = memeUrl;
-              return newMemes;
-            });
-            
-            // 更新result中的memeUrls
-            setResult(prevResult => {
-              if (!prevResult) return prevResult;
-              const newMemeUrls = [...prevResult.memeUrls];
-              newMemeUrls[i] = memeUrl;
-              return {
-                ...prevResult,
-                memeUrls: newMemeUrls
-              };
-            });
-            
-          } catch (error) {
-            console.error(`❌ 第${i + 1}个表情包生成失败:`, error);
-            const fallbackUrl = `https://via.placeholder.com/300x300/ef4444/ffffff?text=生成失败${i + 1}`;
-            
-            setProgressiveMemes(prev => {
-              const newMemes = [...prev];
-              newMemes[i] = fallbackUrl;
-              return newMemes;
-            });
-          }
-        }
-        
-        setIsLoadingMemes(false);
-        setShowDinoGame(false);
-      }
       
       // Add to history
-      const finalRecord = {
-        id: Date.now().toString(),
-        originalText,
-        responses: textResponses,
-        memeUrls: enableImageGeneration ? progressiveMemes : [],
-        style,
-        intensity,
-        language,
-        timestamp: Date.now(),
-      };
-      addToHistory(finalRecord);
+      addToHistory(response);
+      
+      // 如果开启了图片生成，等待所有图片生成完成
+      if (enableImageGeneration) {
+        // 等待所有图片生成完成
+        const checkAllImagesLoaded = () => {
+          if (memeLoadingStates.every(state => !state)) {
+            setIsLoadingMemes(false);
+            setShowDinoGame(false);
+            setIsGenerating(false);
+          } else {
+            setTimeout(checkAllImagesLoaded, 500);
+          }
+        };
+        checkAllImagesLoaded();
+      }
       
     } catch (error) {
       console.error('Error generating comeback:', error);
       toast.error('生成失败，请重试');
       setShowDinoGame(false);
-      setIsGenerating(false);
       setIsLoadingMemes(false);
+      setIsGenerating(false);
     }
   };
   
@@ -184,11 +189,12 @@ export function ComebackGenerator() {
     setLanguage(settings.defaultLanguage);
     setEnableImageGeneration(false);
     setResult(null);
+    setRealtimeMemeUrls([]);
+    setMemeLoadingStates([true, true, true]);
     setShowIntro(true);
     setRageLevel(0);
     setShowDinoGame(false);
     setGameScore(0);
-    setProgressiveMemes([]);
   };
   
   // Copy response to clipboard
@@ -271,7 +277,7 @@ export function ComebackGenerator() {
   };
   
   return (
-    <section data-section="generator" className="py-20 bg-muted/10">
+    <section id="generator-section" className="py-16 bg-background bg-grid">
       <div className="container px-4">
         <div className="mb-8 text-center">
           <h2 className="text-2xl md:text-3xl font-bold font-chakra mb-2">
@@ -392,10 +398,10 @@ export function ComebackGenerator() {
                       checked={enableImageGeneration}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          // 确认对话框
-                          const confirmed = window.confirm(
-                            '⚠️ 开启AI表情包生成后，等待时间会增加30-60秒，且会消耗图片生成API额度。\n\n确认要开启吗？'
-                          );
+                                                      // 确认对话框
+                            const confirmed = window.confirm(
+                              '⚠️ 开启AI表情包生成后，等待时间会增加30-60秒，且会消耗图片生成API额度。\n\n确认要开启吗？'
+                            );
                           setEnableImageGeneration(confirmed);
                         } else {
                           setEnableImageGeneration(false);
@@ -469,7 +475,7 @@ export function ComebackGenerator() {
                     </motion.div>
                   )}
                   
-                  {isGenerating && (
+                  {isGenerating && !result && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -482,18 +488,12 @@ export function ComebackGenerator() {
                       </div>
                       <div className="text-center">
                         <p className="text-lg font-medium">AI 正在构思回怼...</p>
-                        {enableImageGeneration ? (
-                          <div className="mt-2 space-y-1">
-                            <p className="text-sm text-muted-foreground">
-                              🎨 图片生成已开启，预计等待 30-60 秒
-                            </p>
-                            <p className="text-xs text-orange-500">
-                              💡 可以玩小恐龙游戏缓解等待焦虑
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground mt-2">
-                            ⚡ 仅生成文字回应，速度更快
+                        <p className="text-sm text-muted-foreground mt-2">
+                          ⚡ 文字回应将优先显示
+                        </p>
+                        {enableImageGeneration && (
+                          <p className="text-xs text-orange-500 mt-1">
+                            🎨 表情包将在后台生成，完成后自动显示
                           </p>
                         )}
                       </div>
@@ -518,6 +518,21 @@ export function ComebackGenerator() {
                       animate={{ opacity: 1 }}
                       className="space-y-4"
                     >
+                      {/* 如果图片还在生成，显示提示 */}
+                      {enableImageGeneration && isLoadingMemes && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-sm text-orange-700">
+                              🎨 表情包正在后台生成中，请切换到"表情包"标签查看进度
+                            </p>
+                          </div>
+                        </motion.div>
+                      )}
                       {result.responses.map((response, index) => {
                         // 严格的前端过滤和清理
                         let cleanResponse = '';
@@ -625,121 +640,132 @@ export function ComebackGenerator() {
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="py-10 flex flex-col items-center space-y-6"
+                      className="space-y-6"
                     >
-                      <div className="relative w-16 h-16 mb-4">
-                        <div className="absolute inset-0 bg-accent_orange/20 rounded-full animate-pulse"></div>
-                        <div className="absolute inset-2 bg-accent_orange/40 rounded-full animate-pulse animation-delay-150"></div>
-                        <Zap className="absolute inset-0 m-auto h-8 w-8 text-accent_orange animate-pulse animation-delay-300" />
-                      </div>
-                      <div className="text-center">
-                        {enableImageGeneration ? (
-                          <div className="space-y-2">
+                      {enableImageGeneration ? (
+                        <div className="space-y-4">
+                          <div className="text-center">
                             <p className="text-lg font-medium">正在生成AI表情包...</p>
                             <p className="text-sm text-muted-foreground">
-                              🎨 AI正在根据回怼内容创作专属表情包
-                            </p>
-                            <p className="text-xs text-orange-500">
-                              ⏱️ 预计还需要 20-40 秒
+                              🎨 每张图片生成完成后会立即显示
                             </p>
                           </div>
-                        ) : (
-                          <div className="space-y-2">
+                          
+                          {/* 实时显示图片生成状态 */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {[0, 1, 2].map((index) => (
+                              <motion.div
+                                key={index}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: index * 0.1 }}
+                                className="relative bg-muted rounded-lg overflow-hidden border border-border aspect-square"
+                              >
+                                {memeLoadingStates[index] ? (
+                                  // 加载状态
+                                  <div className="w-full h-full flex flex-col items-center justify-center">
+                                    <div className="relative w-12 h-12 mb-3">
+                                      <div className="absolute inset-0 bg-accent_orange/20 rounded-full animate-pulse"></div>
+                                      <div className="absolute inset-2 bg-accent_orange/40 rounded-full animate-pulse animation-delay-150"></div>
+                                      <ImageIcon className="absolute inset-0 m-auto h-6 w-6 text-accent_orange animate-pulse animation-delay-300" />
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                      生成第{index + 1}张图片...
+                                    </p>
+                                  </div>
+                                ) : realtimeMemeUrls[index] ? (
+                                  // 已生成的图片
+                                  <>
+                                    <img
+                                      src={realtimeMemeUrls[index]}
+                                      alt={`表情包 ${index + 1}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm p-2 flex justify-between">
+                                      <Button 
+                                        onClick={() => downloadMeme(realtimeMemeUrls[index])}
+                                        className="h-8 px-3 text-xs text-white/90 hover:text-white bg-transparent hover:bg-white/10"
+                                      >
+                                        <Download className="h-3 w-3 mr-1" />
+                                        下载
+                                      </Button>
+                                      <Button 
+                                        onClick={() => copyMeme(realtimeMemeUrls[index])}
+                                        className="h-8 px-3 text-xs text-white/90 hover:text-white bg-transparent hover:bg-white/10"
+                                      >
+                                        <Copy className="h-3 w-3 mr-1" />
+                                        复制
+                                      </Button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  // 等待状态
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <p className="text-sm text-muted-foreground">等待生成...</p>
+                                  </div>
+                                )}
+                              </motion.div>
+                            ))}
+                          </div>
+                          
+                          {/* 小恐龙游戏 */}
+                          <div className="flex justify-center">
+                            <DinoGame 
+                              isVisible={showDinoGame} 
+                              onGameEnd={handleGameEnd}
+                            />
+                          </div>
+                          
+                          {gameScore > 0 && (
+                            <p className="text-sm text-muted-foreground text-center">
+                              🎮 游戏得分: {gameScore} | 心情平静了许多
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="py-10 flex flex-col items-center space-y-6">
+                          <div className="relative w-16 h-16 mb-4">
+                            <div className="absolute inset-0 bg-accent_orange/20 rounded-full animate-pulse"></div>
+                            <div className="absolute inset-2 bg-accent_orange/40 rounded-full animate-pulse animation-delay-150"></div>
+                            <Zap className="absolute inset-0 m-auto h-8 w-8 text-accent_orange animate-pulse animation-delay-300" />
+                          </div>
+                          <div className="text-center space-y-2">
                             <p className="text-lg font-medium">表情包生成已关闭</p>
                             <p className="text-sm text-muted-foreground">
                               💡 开启AI表情包生成可获得配套表情包
                             </p>
                           </div>
-                        )}
-                      </div>
-                      
-                      {/* 小恐龙游戏 */}
-                      {enableImageGeneration && (
-                        <DinoGame 
-                          isVisible={showDinoGame} 
-                          onGameEnd={handleGameEnd}
-                        />
-                      )}
-                      
-                      {gameScore > 0 && (
-                        <p className="text-sm text-muted-foreground">
-                          🎮 游戏得分: {gameScore} | 心情平静了许多
-                        </p>
+                        </div>
                       )}
                     </motion.div>
                   )}
                   
-                  {/* 表情包显示 - 支持逐个显示 */}
-                  {(result || progressiveMemes.length > 0) && (
+                  {result && result.memeUrls && !isLoadingMemes && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       className="space-y-4"
                     >
                       {enableImageGeneration ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {/* 使用progressiveMemes实现流式显示 */}
-                          {progressiveMemes.map((url, index) => (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {result.memeUrls.map((url, index) => (
                             <motion.div
-                              key={`meme-${index}`}
-                              initial={{ opacity: 0, scale: 0.8, y: 20 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              transition={{ 
-                                delay: index * 0.3, // 错开动画时间
-                                duration: 0.5,
-                                type: "spring",
-                                stiffness: 100
-                              }}
-                              className="relative bg-muted rounded-lg overflow-hidden border border-border group hover:shadow-lg transition-shadow"
+                              key={index}
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: index * 0.2 }}
+                              className="relative bg-muted rounded-lg overflow-hidden border border-border"
                             >
-                              <div className="aspect-square relative">
-                                <img
-                                  src={url}
-                                  alt={`表情包 ${index + 1}`}
-                                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.src = generateSingleFallbackMeme(index);
-                                  }}
-                                />
-                                
-                                {/* 生成中的遮罩 */}
-                                {url.includes('生成中') && (
-                                  <motion.div 
-                                    className="absolute inset-0 bg-black/60 flex items-center justify-center"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                  >
-                                    <div className="text-white text-center">
-                                      <motion.div 
-                                        className="w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-2"
-                                        animate={{ rotate: 360 }}
-                                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                      />
-                                      <p className="text-sm">生成中...</p>
-                                      <p className="text-xs opacity-75">第{index + 1}张</p>
-                                    </div>
-                                  </motion.div>
-                                )}
-                                
-                                {/* 生成完成的标识 */}
-                                {!url.includes('生成中') && !url.includes('placeholder') && (
-                                  <motion.div
-                                    className="absolute top-2 right-2 bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    transition={{ delay: 0.2 }}
-                                  >
-                                    ✓
-                                  </motion.div>
-                                )}
-                              </div>
+                              <img
+                                src={url}
+                                alt={`表情包 ${index + 1}`}
+                                className="w-full aspect-square object-cover"
+                              />
                               
-                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm p-2 flex justify-between">
                                 <Button 
                                   onClick={() => downloadMeme(url)}
                                   className="h-8 px-3 text-xs text-white/90 hover:text-white bg-transparent hover:bg-white/10"
-                                  disabled={url.includes('生成中') || url.includes('placeholder')}
                                 >
                                   <Download className="h-3 w-3 mr-1" />
                                   下载
@@ -747,7 +773,6 @@ export function ComebackGenerator() {
                                 <Button 
                                   onClick={() => copyMeme(url)}
                                   className="h-8 px-3 text-xs text-white/90 hover:text-white bg-transparent hover:bg-white/10"
-                                  disabled={url.includes('生成中') || url.includes('placeholder')}
                                 >
                                   <Copy className="h-3 w-3 mr-1" />
                                   复制
@@ -755,19 +780,6 @@ export function ComebackGenerator() {
                               </div>
                             </motion.div>
                           ))}
-                          
-                          {/* 显示生成进度 */}
-                          {isLoadingMemes && (
-                            <motion.div
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              className="col-span-full text-center py-4"
-                            >
-                              <div className="text-sm text-muted-foreground">
-                                🎨 正在逐个生成表情包... ({progressiveMemes.filter(url => !url.includes('生成中')).length}/3)
-                              </div>
-                            </motion.div>
-                          )}
                         </div>
                       ) : (
                         <div className="text-center py-16 space-y-4">
