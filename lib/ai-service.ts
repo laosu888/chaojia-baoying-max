@@ -498,19 +498,21 @@ function generateSingleFallbackMeme(index: number): string {
   return `https://api.dicebear.com/7.x/shapes/svg?seed=${seeds[index] || 'default'}&backgroundColor=${colors[index] || '6b7280'}&size=300`;
 }
 
-// Create a complete record
+// Create a complete record with progressive meme generation
 export async function createComebackResponse({
   originalText,
   style,
   intensity,
   language,
-  enableImageGeneration = false, // 新增参数，默认不生成图片
+  enableImageGeneration = false,
+  onMemeGenerated, // 新增回调函数
 }: {
   originalText: string;
   style: string;
   intensity: number;
   language: string;
-  enableImageGeneration?: boolean; // 可选参数
+  enableImageGeneration?: boolean;
+  onMemeGenerated?: (memeUrl: string, index: number) => void; // 每生成一个表情包就调用
 }): Promise<ComebackRecord> {
   console.log('🚀 开始生成回怼回应，图片生成:', enableImageGeneration ? '开启' : '关闭');
   
@@ -524,16 +526,44 @@ export async function createComebackResponse({
   let memeUrls: string[] = [];
   
   if (enableImageGeneration) {
-    console.log('🎨 开始生成表情包...');
-    // Generate memes based on all responses
-    memeUrls = await Promise.all(responses.map((responseText, index) => generateSingleMeme({
-      responseText,
-      style,
-      index,
-    })));
+    console.log('🎨 开始逐个生成表情包...');
+    
+    // 初始化表情包数组，先用占位符
+    memeUrls = [
+      'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...',
+      'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...',
+      'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...'
+    ];
+    
+    // 逐个生成表情包
+    for (let i = 0; i < responses.length && i < 3; i++) {
+      try {
+        console.log(`🎯 开始生成第${i + 1}个表情包`);
+        const memeUrl = await generateSingleMeme({
+          responseText: responses[i],
+          style,
+          index: i,
+        });
+        
+        memeUrls[i] = memeUrl;
+        console.log(`✅ 第${i + 1}个表情包生成完成:`, memeUrl);
+        
+        // 立即通知前端更新
+        if (onMemeGenerated) {
+          onMemeGenerated(memeUrl, i);
+        }
+      } catch (error) {
+        console.error(`❌ 第${i + 1}个表情包生成失败:`, error);
+        memeUrls[i] = generateSingleFallbackMeme(i);
+        
+        // 即使失败也通知前端
+        if (onMemeGenerated) {
+          onMemeGenerated(memeUrls[i], i);
+        }
+      }
+    }
   } else {
     console.log('⚡ 跳过表情包生成，使用占位符');
-    // 使用占位符表情包，不消耗API
     memeUrls = [
       'https://via.placeholder.com/300x300/6b7280/ffffff?text=表情包生成已关闭',
       'https://via.placeholder.com/300x300/ef4444/ffffff?text=开启后可生成',

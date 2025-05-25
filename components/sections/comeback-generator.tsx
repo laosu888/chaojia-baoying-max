@@ -49,6 +49,7 @@ export function ComebackGenerator() {
   const [isLoadingMemes, setIsLoadingMemes] = useState(false);
   const [showDinoGame, setShowDinoGame] = useState(false);
   const [gameScore, setGameScore] = useState(0);
+  const [progressiveMemes, setProgressiveMemes] = useState<string[]>([]);
   
   // Refs
   const responseRefs = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)];
@@ -66,8 +67,10 @@ export function ComebackGenerator() {
       setIsGenerating(true);
       setShowIntro(false);
       setResult(null);
-      setIsLoadingMemes(true);
-      setShowDinoGame(true);
+      setIsLoadingMemes(enableImageGeneration);
+      setShowDinoGame(enableImageGeneration);
+      setGameScore(0);
+      setProgressiveMemes([]);
       
       // Update rage meter based on intensity
       setRageLevel(intensity);
@@ -79,6 +82,13 @@ export function ComebackGenerator() {
         intensity,
         language,
         enableImageGeneration,
+        onMemeGenerated: (memeUrl: string, index: number) => {
+          setProgressiveMemes(prev => {
+            const newMemes = [...prev];
+            newMemes[index] = memeUrl;
+            return newMemes;
+          });
+        }
       });
       
       // Add to history
@@ -90,10 +100,14 @@ export function ComebackGenerator() {
         memeUrls: response.memeUrls,
       });
       
-      // Simulate delay for meme loading
-      await sleep(500);
-      setIsLoadingMemes(false);
-      setShowDinoGame(false);
+      // 如果开启了图片生成，初始化表情包占位符
+      if (enableImageGeneration) {
+        setProgressiveMemes([
+          'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...',
+          'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...',
+          'https://via.placeholder.com/300x300/6b7280/ffffff?text=生成中...'
+        ]);
+      }
       
     } catch (error) {
       console.error('Error generating comeback:', error);
@@ -101,6 +115,8 @@ export function ComebackGenerator() {
       setShowDinoGame(false);
     } finally {
       setIsGenerating(false);
+      setIsLoadingMemes(false);
+      setShowDinoGame(false);
     }
   };
   
@@ -116,6 +132,7 @@ export function ComebackGenerator() {
     setRageLevel(0);
     setShowDinoGame(false);
     setGameScore(0);
+    setProgressiveMemes([]);
   };
   
   // Copy response to clipboard
@@ -198,7 +215,7 @@ export function ComebackGenerator() {
   };
   
   return (
-    <section id="generator-section" className="py-16 bg-background bg-grid">
+    <section data-section="generator" className="py-20 bg-muted/10">
       <div className="container px-4">
         <div className="mb-8 text-center">
           <h2 className="text-2xl md:text-3xl font-bold font-chakra mb-2">
@@ -596,7 +613,8 @@ export function ComebackGenerator() {
                     </motion.div>
                   )}
                   
-                  {result && result.memeUrls && !isLoadingMemes && (
+                  {/* 表情包显示 - 支持逐个显示 */}
+                  {(result || progressiveMemes.length > 0) && !isLoadingMemes && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -604,7 +622,8 @@ export function ComebackGenerator() {
                     >
                       {enableImageGeneration ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {result.memeUrls.map((url, index) => (
+                          {/* 使用progressiveMemes或result.memeUrls */}
+                          {(progressiveMemes.length > 0 ? progressiveMemes : result?.memeUrls || []).map((url, index) => (
                             <motion.div
                               key={index}
                               initial={{ opacity: 0, scale: 0.9 }}
@@ -616,12 +635,28 @@ export function ComebackGenerator() {
                                 src={url}
                                 alt={`表情包 ${index + 1}`}
                                 className="w-full aspect-square object-cover"
+                                onError={(e) => {
+                                  // 图片加载失败时的处理
+                                  const target = e.target as HTMLImageElement;
+                                  target.src = `https://via.placeholder.com/300x300/ef4444/ffffff?text=生成失败`;
+                                }}
                               />
+                              
+                              {/* 显示生成状态 */}
+                              {url.includes('生成中') && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                  <div className="text-white text-center">
+                                    <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full mx-auto mb-2" />
+                                    <p className="text-sm">生成中...</p>
+                                  </div>
+                                </div>
+                              )}
                               
                               <div className="absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm p-2 flex justify-between">
                                 <Button 
                                   onClick={() => downloadMeme(url)}
                                   className="h-8 px-3 text-xs text-white/90 hover:text-white bg-transparent hover:bg-white/10"
+                                  disabled={url.includes('生成中') || url.includes('placeholder')}
                                 >
                                   <Download className="h-3 w-3 mr-1" />
                                   下载
@@ -629,6 +664,7 @@ export function ComebackGenerator() {
                                 <Button 
                                   onClick={() => copyMeme(url)}
                                   className="h-8 px-3 text-xs text-white/90 hover:text-white bg-transparent hover:bg-white/10"
+                                  disabled={url.includes('生成中') || url.includes('placeholder')}
                                 >
                                   <Copy className="h-3 w-3 mr-1" />
                                   复制

@@ -116,17 +116,32 @@ export function DinoGame({ isVisible, onGameEnd }: DinoGameProps) {
       }
     };
 
+    // 点击事件处理
+    const handleClick = (e: MouseEvent) => {
+      e.preventDefault();
+      if (gameOver) {
+        resetGame();
+      } else {
+        jump();
+      }
+    };
+
     if (isVisible) {
-      window.addEventListener('keydown', handleKeyPress);
-      // 添加触摸事件监听
-      if (gameRef.current) {
-        gameRef.current.addEventListener('touchstart', handleTouchStart, { passive: false });
+      // 全局键盘事件
+      document.addEventListener('keydown', handleKeyPress);
+      
+      // 游戏区域的触摸和点击事件
+      const gameElement = gameRef.current;
+      if (gameElement) {
+        gameElement.addEventListener('touchstart', handleTouchStart, { passive: false });
+        gameElement.addEventListener('click', handleClick);
       }
       
       return () => {
-        window.removeEventListener('keydown', handleKeyPress);
-        if (gameRef.current) {
-          gameRef.current.removeEventListener('touchstart', handleTouchStart);
+        document.removeEventListener('keydown', handleKeyPress);
+        if (gameElement) {
+          gameElement.removeEventListener('touchstart', handleTouchStart);
+          gameElement.removeEventListener('click', handleClick);
         }
       };
     }

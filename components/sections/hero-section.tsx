@@ -6,38 +6,34 @@ import { Button } from '@/components/ui/button';
 
 export function HeroSection() {
   const scrollToMain = () => {
-    const generatorSection = document.getElementById('generator-section');
+    const generatorSection = document.querySelector('[data-section="generator"]');
     if (generatorSection) {
-      const yOffset = -80; // Header height offset
-      const y = generatorSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      window.scrollTo({ top: y, behavior: 'smooth' });
+      generatorSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
   
   const scrollToTestimonials = () => {
-    const testimonialsSection = document.getElementById('testimonials-section');
+    const testimonialsSection = document.querySelector('[data-section="testimonials"]');
     if (testimonialsSection) {
-      const yOffset = -80; // Header height offset
-      const y = testimonialsSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      window.scrollTo({ top: y, behavior: 'smooth' });
+      testimonialsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
   
-  // Falling emojis animation
-  const emojis = ['😂', '🔥', '💯', '👊', '💪', '🤬', '💣', '🤡', '😡', '👑'];
+  // Falling emojis animation - 增加更多表情包
+  const emojis = ['😂', '🔥', '💯', '👊', '💪', '🤬', '💣', '🤡', '😡', '👑', '🎯', '⚡', '💥', '🚀'];
   
   return (
     <section className="relative min-h-[80vh] flex flex-col items-center justify-center hero-gradient overflow-hidden">
-      {/* Falling emojis */}
+      {/* Falling emojis - 左侧 */}
       <div className="absolute inset-0 pointer-events-none">
-        {emojis.map((emoji, i) => (
+        {emojis.slice(0, 7).map((emoji, i) => (
           <motion.div
-            key={i}
+            key={`left-${i}`}
             className="absolute text-3xl md:text-4xl"
             initial={{ 
-              x: `${Math.random() * 100}%`, 
+              x: `${Math.random() * 45}%`, // 左侧0-45%
               y: -50,
-              opacity: Math.random() * 0.5 + 0.5,
+              opacity: Math.random() * 0.6 + 0.4,
               scale: Math.random() * 0.5 + 0.8
             }}
             animate={{
@@ -45,7 +41,7 @@ export function HeroSection() {
               rotate: Math.random() * 360,
             }}
             transition={{
-              duration: Math.random() * 10 + 10,
+              duration: Math.random() * 8 + 12,
               repeat: Infinity,
               delay: Math.random() * 5,
               ease: 'linear'
@@ -54,15 +50,16 @@ export function HeroSection() {
             {emoji}
           </motion.div>
         ))}
-        {/* 右侧额外的表情包掉落 */}
-        {emojis.map((emoji, i) => (
+        
+        {/* 右侧表情包掉落 */}
+        {emojis.slice(7).map((emoji, i) => (
           <motion.div
             key={`right-${i}`}
             className="absolute text-2xl md:text-3xl"
             initial={{ 
-              x: `${50 + Math.random() * 50}%`, // 右侧50%-100%
+              x: `${55 + Math.random() * 45}%`, // 右侧55%-100%
               y: -50,
-              opacity: Math.random() * 0.4 + 0.3,
+              opacity: Math.random() * 0.5 + 0.3,
               scale: Math.random() * 0.4 + 0.6
             }}
             animate={{
@@ -70,9 +67,9 @@ export function HeroSection() {
               rotate: -Math.random() * 360, // 反向旋转
             }}
             transition={{
-              duration: Math.random() * 8 + 12,
+              duration: Math.random() * 10 + 10,
               repeat: Infinity,
-              delay: Math.random() * 8 + 2, // 不同的延迟
+              delay: Math.random() * 6 + 1, // 不同的延迟
               ease: 'linear'
             }}
           >
