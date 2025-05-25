@@ -428,12 +428,14 @@ Requirements:
 - High contrast and vibrant colors
 - Professional meme quality
 - Text area at bottom for Chinese text overlay
-- ${style} attitude and expression`;
+- ${style} attitude and expression
+
+Please generate an image based on this description.`;
 
     console.log(`🎯 第${index + 1}个表情包提示词:`, prompt);
 
-    // 使用图片生成API
-    const response = await fetch('https://vip.apiyi.com/v1/images/generations', {
+    // 使用chat completions接口进行图片生成（根据API示例）
+    const response = await fetch('https://vip.apiyi.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${IMAGE_API_KEY}`,
@@ -441,11 +443,17 @@ Requirements:
       },
       body: JSON.stringify({
         model: 'gpt-4o-image',
-        prompt: prompt,
-        n: 1,
-        size: '1024x1024',
-        quality: 'standard',
-        response_format: 'url'
+        stream: true,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional meme generator. Generate high-quality images based on user descriptions.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
       }),
     });
 
@@ -457,20 +465,73 @@ Requirements:
       return generateSingleFallbackMeme(index);
     }
 
-    const data = await response.json();
-    console.log(`📝 第${index + 1}个表情包API响应数据:`, data);
+    // 处理流式响应
+    const reader = response.body?.getReader();
+    if (!reader) {
+      console.error(`❌ 第${index + 1}个表情包无法读取响应流`);
+      return generateSingleFallbackMeme(index);
+    }
 
-    // 检查响应格式
-    if (data.data && data.data[0] && data.data[0].url) {
-      const imageUrl = data.data[0].url;
+    let imageUrl = '';
+    const decoder = new TextDecoder();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') break;
+
+            try {
+              const parsed = JSON.parse(data);
+              console.log(`📝 第${index + 1}个表情包流式数据:`, parsed);
+
+              // 检查是否包含图片URL
+              if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta) {
+                const delta = parsed.choices[0].delta;
+                if (delta.content) {
+                  // 尝试从content中提取图片URL
+                  const urlMatch = delta.content.match(/https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp)/i);
+                  if (urlMatch) {
+                    imageUrl = urlMatch[0];
+                    console.log(`✅ 第${index + 1}个表情包找到图片URL:`, imageUrl);
+                    break;
+                  }
+                }
+              }
+
+              // 检查其他可能的图片URL位置
+              if (parsed.url) {
+                imageUrl = parsed.url;
+                break;
+              }
+              if (parsed.data && parsed.data[0] && parsed.data[0].url) {
+                imageUrl = parsed.data[0].url;
+                break;
+              }
+            } catch (e) {
+              console.log(`⚠️ 第${index + 1}个表情包解析JSON失败:`, data);
+            }
+          }
+        }
+
+        if (imageUrl) break;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    if (imageUrl) {
       console.log(`✅ 第${index + 1}个表情包生成成功:`, imageUrl);
       return imageUrl;
-    } else if (data.url) {
-      // 备用格式检查
-      console.log(`✅ 第${index + 1}个表情包生成成功(备用格式):`, data.url);
-      return data.url;
     } else {
-      console.error(`❌ 第${index + 1}个表情包响应格式异常:`, data);
+      console.error(`❌ 第${index + 1}个表情包未找到图片URL`);
       return generateSingleFallbackMeme(index);
     }
 
